@@ -292,7 +292,26 @@ for (rowIndex in 0 until table.rows) {
             ).apply {
                 setMargins(2, 2, 2, 2)
             }
+             if (target != null) {
+                rangeEndIndex = target.first
+                refreshSelection()
+            }
+            true
         }
+
+        android.view.MotionEvent.ACTION_UP -> {
+            view.parent.requestDisallowInterceptTouchEvent(false)
+            true
+        }
+
+        android.view.MotionEvent.ACTION_CANCEL -> {
+            view.parent.requestDisallowInterceptTouchEvent(false)
+            true
+        }
+
+        else -> true
+        }
+        
       button.setOnClickListener {
             selectedCellIndex = index
             rangeEndIndex = null
