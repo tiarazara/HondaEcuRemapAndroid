@@ -2,6 +2,8 @@ package com.example.hondaecuremap
 
 import androidx.activity.ComponentActivity
 import android.content.Context
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.hardware.usb.UsbManager
 import android.net.Uri
 import android.os.Bundle
@@ -11,6 +13,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TableLayout
 import android.widget.TableRow
+import android.widget.HorizontalScrollView
 import android.app.AlertDialog
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -35,6 +38,9 @@ class MainActivity : ComponentActivity() {
     private var binBytes: ByteArray? = null
     private var xdfTables: List<XdfTable> = emptyList()
     private var binName = "Scoopy_K93N01.bin"
+    private var selectedCellIndex = 0
+    private var blockSelectMode = false
+    private var rangeEndIndex: Int? = null
 
     private val openBin = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) loadBin(uri) }
     private val openXdf = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) loadXdf(uri) }
@@ -47,7 +53,7 @@ class MainActivity : ComponentActivity() {
         val scroll = ScrollView(this)
         val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         body.addView(TextView(this).apply { text = "HONDA ECU REMAP"; textSize = 24f; setTextColor(0xFF12345A.toInt()); gravity = Gravity.CENTER_VERTICAL })
-        body.addView(TextView(this).apply { text = "Scoopy K93-N01  •  Alpha 0.5"; textSize = 13f; setTextColor(0xFF64748B.toInt()); setPadding(0, 4, 0, 16) })
+        body.addView(TextView(this).apply { text = "Scoopy K93-N01  •  Alpha 0.6 Map Editor"; textSize = 13f; setTextColor(0xFF64748B.toInt()); setPadding(0, 4, 0, 16) })
         body.addView(actionButton("1. BUKA FILE BIN", "Pilih file backup ECU") { openBin.launch(arrayOf("application/octet-stream", "application/*", "*/*")) })
         body.addView(actionButton("2. MUAT FILE XDF", "Pilih definisi map TunerPro") { openXdf.launch(arrayOf("application/xml", "text/xml", "*/*")) })
         body.addView(actionButton("SIMPAN SALINAN BIN", "Ekspor file tanpa perubahan") { if (binBytes == null) toast("Buka BIN dulu") else saveBin.launch(binName.substringBeforeLast('.', binName) + "_copy.bin") })
@@ -57,7 +63,7 @@ class MainActivity : ComponentActivity() {
         xdfInfo = infoText("XDF: belum dimuat")
         body.addView(status); body.addView(binInfo); body.addView(xdfInfo)
         body.addView(section("DAFTAR MAP"))
-        body.addView(infoText("Nilai map ditampilkan memakai rumus MATH dari XDF. Sumbu RPM/TPS akan ditambahkan bertahap; verifikasi hasil dengan TunerPro sebelum memakai file hasil edit."))
+        body.addView(infoText("Tabel memakai sumbu RPM dan TPS dari breakpoint XDF. Ketuk PILIH BLOK, sentuh dua sudut area, lalu salin atau tempel nilai sekaligus seperti spreadsheet."))
         mapList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         body.addView(mapList)
         body.addView(section("EDITOR MAP (NILAI TEKNIK XDF)"))
@@ -70,7 +76,7 @@ class MainActivity : ComponentActivity() {
         usbInfo = infoText("Belum diperiksa")
         body.addView(usbInfo)
         body.addView(section("CARA EDIT"))
-        body.addView(infoText("Pilih map, lalu sentuh sel untuk mengedit nilai teknik. Konversi saat ini mendukung rumus linear sederhana yang ada di XDF Scoopy ini. Data 16-bit dibaca mengikuti DEFAULTS lsbfirst pada XDF. Cocokkan beberapa nilai dengan TunerPro sebelum digunakan."))
+        body.addView(infoText("Geser tabel ke kanan/kiri dan atas/bawah. PILIH BLOK: tekan tombolnya, lalu sentuh sudut akhir area. SALIN BLOK menyalin nilai sebagai TAB/baris baru; TEMPEL BLOK menerima data dari spreadsheet atau TunerPro. Sumbu mengikuti breakpoint XDF."))
         body.addView(section("KEAMANAN"))
         body.addView(infoText("Aplikasi ini mengedit salinan BIN di memori dan tidak mengirim perintah flash ke ECU. Simpan sebagai file baru, bandingkan dengan BIN asli, dan lakukan verifikasi checksum/protokol secara terpisah sebelum flashing."))
         scroll.addView(body)
@@ -162,31 +168,146 @@ class MainActivity : ComponentActivity() {
         if (bytes == null || addr == null) { mapPreview.text = "${table.name}: BIN atau alamat belum tersedia."; return }
         if (table.endExclusive > bytes.size) { mapPreview.text = "${table.name}: alamat di luar ukuran BIN. Preview dibatalkan."; return }
         selectedTable = table
+        selectedCellIndex = selectedCellIndex.coerceIn(0, table.rows * table.cols - 1)
+        rangeEndIndex = rangeEndIndex?.coerceIn(0, table.rows * table.cols - 1)
         val width = (table.bits / 8).coerceAtLeast(1)
-        val count = table.rows * table.cols
+        val xAxis = axisValues(table.xAxisLink, table.cols, bytes)
+        val yAxis = axisValues(table.yAxisLink, table.rows, bytes)
         val unit = table.units.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""
-        mapPreview.text = "${table.name}\nAlamat: 0x%X • ${table.rows} × ${table.cols} • ${table.bits}-bit$unit\nRumus XDF: ${table.equation}\nSentuh sel untuk edit nilai teknik. Perubahan: ${if (dirty) "ada" else "belum ada"}.".format(addr)
+        val rangeText = rangeEndIndex?.let { end -> "\nBlok: baris ${minOf(selectedCellIndex / table.cols, end / table.cols) + 1}-${maxOf(selectedCellIndex / table.cols, end / table.cols) + 1}, kolom ${minOf(selectedCellIndex % table.cols, end % table.cols) + 1}-${maxOf(selectedCellIndex % table.cols, end % table.cols) + 1}" } ?: ""
+        mapPreview.text = "${table.name}\nAlamat: 0x%X • ${table.rows} baris × ${table.cols} kolom • ${table.bits}-bit$unit\nKolom → TPS: ${if (xAxis != null) "breakpoint OK" else "belum ditautkan"}   Baris ↓ RPM: ${if (yAxis != null) "breakpoint OK" else "belum ditautkan"}\nSel awal: baris ${selectedCellIndex / table.cols + 1}, kolom ${selectedCellIndex % table.cols + 1}$rangeText • perubahan: ${if (dirty) "ada" else "belum ada"}.".format(addr)
         mapGrid.removeAllViews()
-        val mobileColumns = minOf(table.cols, 5)
-        for (start in 0 until count step mobileColumns) {
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            for (i in start until minOf(start + mobileColumns, count)) {
-                val p = addr + i * width
-                val raw = readRaw(bytes, p, width, table.lsbFirst)
+        val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        controls.addView(Button(this).apply { text = "EDIT SEL"; isAllCaps = false; setOnClickListener { editSelectedCell(table) } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        controls.addView(Button(this).apply { text = if (blockSelectMode) "SENTUH SUDUT AKHIR" else "PILIH BLOK"; isAllCaps = false; setOnClickListener { blockSelectMode = true; rangeEndIndex = null; showMap(table); toast("Sentuh sel sudut akhir blok") } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        controls.addView(Button(this).apply { text = "SALIN BLOK"; isAllCaps = false; setOnClickListener { copySelectedBlock(table) } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        controls.addView(Button(this).apply { text = "TEMPEL BLOK"; isAllCaps = false; setOnClickListener { pasteBlock(table) } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        mapGrid.addView(controls)
+        val vertical = ScrollView(this)
+        val horizontal = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = true }
+        val grid = TableLayout(this).apply { isStretchAllColumns = false }
+        val header = TableRow(this)
+        header.addView(axisCell("RPM ↓ / TPS →", 84, true))
+        for (col in 0 until table.cols) header.addView(axisCell(xAxis?.getOrNull(col)?.let { fmtAxis(it) } ?: "TPS ${col + 1}", 84, true))
+        grid.addView(header)
+        for (rowIndex in 0 until table.rows) {
+            val row = TableRow(this)
+            row.addView(axisCell(yAxis?.getOrNull(rowIndex)?.let { fmtAxis(it) } ?: "RPM ${rowIndex + 1}", 84, true))
+            for (colIndex in 0 until table.cols) {
+                val index = rowIndex * table.cols + colIndex
+                val position = addr + index * width
+                val raw = readRaw(bytes, position, width, table.lsbFirst)
                 val engineering = scaleFromRaw(raw, table.equation)
                 val shown = engineering?.let { String.format(java.util.Locale.US, "% .${table.decimals.coerceIn(0, 4)}f", it) } ?: "RAW $raw"
-                row.addView(Button(this).apply {
-                    text = "${i + 1}\n$shown"
+                val button = Button(this).apply {
+                    text = shown
                     isAllCaps = false
                     textSize = 11f
                     minWidth = 0
-                    setPadding(3, 5, 3, 5)
-                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(2, 2, 2, 2) }
-                    setOnClickListener { editEngineeringCell(table, i, p, width, raw, engineering) }
-                })
+                    setPadding(2, 4, 2, 4)
+                    val end = rangeEndIndex
+                    val inRange = if (end == null) false else { val r1 = selectedCellIndex / table.cols; val c1 = selectedCellIndex % table.cols; val r2 = end / table.cols; val c2 = end % table.cols; rowIndex in minOf(r1, r2)..maxOf(r1, r2) && colIndex in minOf(c1, c2)..maxOf(c1, c2) }
+                    setBackgroundColor(if (inRange) 0xFF9BC7F3.toInt() else if (index == selectedCellIndex) 0xFFB7D7F5.toInt() else 0xFFE1E5EA.toInt())
+                    layoutParams = TableRow.LayoutParams(dp(84), dp(54)).apply { setMargins(2, 2, 2, 2) }
+                    setOnClickListener { if (blockSelectMode) { rangeEndIndex = index; blockSelectMode = false } else { selectedCellIndex = index; rangeEndIndex = null }; showMap(table) }
+                    setOnLongClickListener { selectedCellIndex = index; editSelectedCell(table); true }
+                }
+                row.addView(button)
             }
-            mapGrid.addView(row)
+            grid.addView(row)
         }
+        horizontal.addView(grid)
+        vertical.addView(horizontal)
+        mapGrid.addView(vertical, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(430)))
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun axisCell(label: String, widthDp: Int, header: Boolean): TextView = TextView(this).apply {
+        text = label; gravity = Gravity.CENTER; textSize = 11f; setTextColor(0xFF17324D.toInt())
+        setBackgroundColor(if (header) 0xFFC9D9E8.toInt() else 0xFFE1E5EA.toInt())
+        layoutParams = TableRow.LayoutParams(dp(widthDp), dp(48)).apply { setMargins(2, 2, 2, 2) }
+    }
+
+    private fun fmtAxis(value: Double): String = if (value % 1.0 == 0.0) value.toLong().toString() else String.format(java.util.Locale.US, "%.1f", value)
+
+    private fun axisValues(linkId: String?, count: Int, bytes: ByteArray): List<Double>? {
+        if (linkId.isNullOrBlank()) return null
+        val linked = xdfTables.firstOrNull { it.uniqueId.equals(linkId, true) } ?: return null
+        val address = linked.address ?: return null
+        val width = (linked.bits / 8).coerceAtLeast(1)
+        if (address < 0 || address + count * width > bytes.size) return null
+        return (0 until count).map { i ->
+            val raw = readRaw(bytes, address + i * width, width, linked.lsbFirst)
+            scaleFromRaw(raw, linked.equation) ?: raw.toDouble()
+        }
+    }
+
+    private fun editSelectedCell(table: XdfTable) {
+        val bytes = binBytes ?: return
+        val address = table.address ?: return
+        val index = selectedCellIndex.coerceIn(0, table.rows * table.cols - 1)
+        val width = (table.bits / 8).coerceAtLeast(1)
+        val position = address + index * width
+        val raw = readRaw(bytes, position, width, table.lsbFirst)
+        editEngineeringCell(table, index, position, width, raw, scaleFromRaw(raw, table.equation))
+    }
+
+    private fun copySelectedBlock(table: XdfTable) {
+        val bytes = binBytes ?: return
+        val address = table.address ?: return
+        val end = rangeEndIndex
+        val r1 = selectedCellIndex / table.cols
+        val c1 = selectedCellIndex % table.cols
+        val r2 = end?.div(table.cols) ?: r1
+        val c2 = end?.rem(table.cols) ?: c1
+        val top = minOf(r1, r2); val bottom = maxOf(r1, r2)
+        val left = minOf(c1, c2); val right = maxOf(c1, c2)
+        val width = (table.bits / 8).coerceAtLeast(1)
+        val text = (top..bottom).joinToString("\n") { row ->
+            (left..right).joinToString("\t") { col ->
+                val raw = readRaw(bytes, address + (row * table.cols + col) * width, width, table.lsbFirst)
+                val eng = scaleFromRaw(raw, table.equation)
+                eng?.let { String.format(java.util.Locale.US, "% .${table.decimals.coerceIn(0, 4)}f", it).trim() } ?: raw.toString()
+            }
+        }
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("${table.name} map block", text))
+        toast("Blok ${bottom - top + 1} × ${right - left + 1} disalin")
+    }
+
+    private fun pasteBlock(table: XdfTable) {
+        val input = EditText(this).apply {
+            hint = "Contoh: 12.0\t12.5\t13.0\n14.0\t14.5\t15.0"
+            minLines = 5; gravity = Gravity.TOP or Gravity.START; textSize = 14f
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        }
+        AlertDialog.Builder(this).setTitle("Tempel blok nilai • ${table.name}")
+            .setMessage("Tempel angka dari spreadsheet. TAB = kolom, Enter = baris. Mulai dari sel terpilih (baris ${selectedCellIndex / table.cols + 1}, kolom ${selectedCellIndex % table.cols + 1}).")
+            .setView(input).setNegativeButton("Batal", null)
+            .setPositiveButton("Terapkan blok") { _, _ ->
+                val text = input.text.toString().trim()
+                val rows = text.lines().filter { it.isNotBlank() }.map { line -> line.trim().split(Regex("\\s*\\t\\s*|\\s{2,}")) }
+                if (rows.isEmpty()) { toast("Blok kosong"); return@setPositiveButton }
+                val bytes = binBytes ?: return@setPositiveButton
+                val baseRow = selectedCellIndex / table.cols
+                val baseCol = selectedCellIndex % table.cols
+                val width = (table.bits / 8).coerceAtLeast(1)
+                val maxRaw = if (width >= 4) 0xFFFFFFFFL else (1L shl (width * 8)) - 1L
+                var changed = 0
+                var problem: String? = null
+                loop@ for ((r, cells) in rows.withIndex()) for ((c, cell) in cells.withIndex()) {
+                    val targetRow = baseRow + r; val targetCol = baseCol + c
+                    if (targetRow >= table.rows || targetCol >= table.cols) { problem = "Blok melewati batas tabel pada baris ${r + 1}, kolom ${c + 1}"; break@loop }
+                    val value = cell.trim().replace(',', '.').toDoubleOrNull()
+                    val raw = value?.let { rawFromEngineering(it, table.equation) }
+                    if (raw == null || raw < 0 || raw > maxRaw) { problem = "Nilai tidak valid: $cell"; break@loop }
+                    writeRaw(bytes, table.address!! + (targetRow * table.cols + targetCol) * width, width, table.lsbFirst, raw)
+                    changed++
+                }
+                if (problem != null) { toast("Tidak semua blok diterapkan: $problem. Periksa nilai dan batas tabel.") }
+                else { dirty = true; selectedCellIndex = baseRow * table.cols + baseCol; showMap(table); status.text = "Ada perubahan BIN yang belum disimpan."; toast("$changed sel diperbarui") }
+            }.show()
     }
 
     private fun editEngineeringCell(table: XdfTable, index: Int, position: Int, width: Int, raw: Long, engineering: Double?) {
@@ -198,23 +319,16 @@ class MainActivity : ComponentActivity() {
             setSingleLine(true)
         }
         AlertDialog.Builder(this)
-            .setTitle("Edit ${table.name} • sel ${index + 1}")
-            .setMessage("Nilai tersimpan memakai rumus XDF: ${table.equation}. Data mentah saat ini: $raw")
+            .setTitle("Edit ${table.name} • baris ${index / table.cols + 1}, kolom ${index % table.cols + 1}")
+            .setMessage("Rumus XDF: ${table.equation}. Data mentah: $raw")
             .setView(input)
             .setNegativeButton("Batal", null)
             .setPositiveButton("Terapkan") { _, _ ->
                 val value = input.text.toString().trim().toDoubleOrNull()
                 val encoded = value?.let { rawFromEngineering(it, table.equation) }
                 val maxRaw = if (width >= 4) 0xFFFFFFFFL else (1L shl (width * 8)) - 1L
-                if (encoded == null || encoded < 0 || encoded > maxRaw) {
-                    toast("Nilai tidak valid atau rumus XDF belum didukung")
-                } else {
-                    binBytes?.let { writeRaw(it, position, width, table.lsbFirst, encoded) }
-                    dirty = true
-                    showMap(table)
-                    status.text = "Ada perubahan BIN yang belum disimpan."
-                    toast("Nilai teknik diperbarui di memori")
-                }
+                if (encoded == null || encoded < 0 || encoded > maxRaw) toast("Nilai tidak valid atau rumus XDF belum didukung")
+                else { binBytes?.let { writeRaw(it, position, width, table.lsbFirst, encoded) }; dirty = true; selectedCellIndex = index; showMap(table); status.text = "Ada perubahan BIN yang belum disimpan."; toast("Nilai teknik diperbarui") }
             }.show()
     }
 
@@ -243,7 +357,10 @@ data class XdfTable(
     val equation: String = "X",
     val decimals: Int = 0,
     val units: String = "",
-    val lsbFirst: Boolean = false
+    val lsbFirst: Boolean = false,
+    val uniqueId: String = "",
+    val xAxisLink: String? = null,
+    val yAxisLink: String? = null
 ) {
     val endExclusive: Int get() = (address ?: 0) + rows * cols * ((bits + 7) / 8)
 }
@@ -255,6 +372,7 @@ object XdfReader {
         val out = mutableListOf<XdfTable>()
         var inTable = false
         var title = "Untitled"
+        var uniqueId = ""
         var address: Int? = null
         var rows = 1
         var cols = 1
@@ -264,13 +382,23 @@ object XdfReader {
         var decimals = 0
         var units = ""
         var lsbFirst = false
+        var xLink: String? = null
+        var yLink: String? = null
         while (parser.eventType != XmlPullParser.END_DOCUMENT) {
             when (parser.eventType) {
                 XmlPullParser.START_TAG -> when (parser.name) {
                     "DEFAULTS" -> lsbFirst = parser.getAttributeValue(null, "lsbfirst") == "1"
-                    "XDFTABLE" -> { inTable = true; title = "Untitled"; address = null; rows = 1; cols = 1; bits = 8; equation = "X"; decimals = 0; units = "" }
+                    "XDFTABLE" -> {
+                        inTable = true; title = "Untitled"; uniqueId = parser.getAttributeValue(null, "uniqueid") ?: ""
+                        address = null; rows = 1; cols = 1; bits = 8; equation = "X"; decimals = 0; units = ""; xLink = null; yLink = null
+                    }
                     "title" -> if (inTable) title = parser.nextText().trim()
                     "XDFAXIS" -> if (inTable) axis = parser.getAttributeValue(null, "id") ?: ""
+                    "embedinfo" -> if (inTable) {
+                        val link = parser.getAttributeValue(null, "linkobjid")
+                        if (axis == "x") xLink = link
+                        if (axis == "y") yLink = link
+                    }
                     "units" -> if (inTable && axis == "z") units = parser.nextText().trim()
                     "decimalpl" -> if (inTable && axis == "z") decimals = parser.nextText().trim().toIntOrNull() ?: 0
                     "MATH" -> if (inTable && axis == "z") equation = parser.getAttributeValue(null, "equation") ?: equation
@@ -282,7 +410,7 @@ object XdfReader {
                     }
                 }
                 XmlPullParser.END_TAG -> when (parser.name) {
-                    "XDFTABLE" -> if (inTable) { out.add(XdfTable(title, address, rows.coerceAtLeast(1), cols.coerceAtLeast(1), bits.coerceAtLeast(1), equation, decimals, units, lsbFirst)); inTable = false }
+                    "XDFTABLE" -> if (inTable) { out.add(XdfTable(title, address, rows.coerceAtLeast(1), cols.coerceAtLeast(1), bits.coerceAtLeast(1), equation, decimals, units, lsbFirst, uniqueId, xLink, yLink)); inTable = false }
                     "XDFAXIS" -> axis = ""
                 }
             }

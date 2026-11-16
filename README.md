@@ -1,17 +1,16 @@
-# Honda ECU Remap Android — Alpha 0.5
+# Honda ECU Remap Android — Alpha 0.6
 
-Android app project for loading a BIN and TunerPro XDF, listing XDF tables, displaying Z values through the simple linear XDF equations used in the supplied Scoopy K93-N01 definition, editing engineering values, exporting a separate BIN copy, and detecting an attached FTDI USB device.
+Android Kotlin project for offline BIN/XDF map viewing and editing.
 
-## Build automatically with GitHub Actions
-1. Upload the complete project folder contents to a GitHub repository (include `.github/workflows`).
-2. Open **Actions** and run **Build Honda ECU Remap APK**, or push a commit to `main`.
-3. Download the `HondaEcuRemap-debug-apk` artifact and extract `app-debug.apk`.
+## Alpha 0.6 updates
+- RPM and TPS linked breakpoint headers for maps whose XDF axes link to breakpoint tables.
+- Scrollable calibration grid.
+- Rectangular block selection, clipboard copy, and multi-cell paste (TAB-separated columns, newline-separated rows).
+- XDF engineering-value conversion for supported linear equations.
+- Save edits to a new BIN file; the input file is not overwritten.
 
-## Current limits
-- Engineering conversion supports only simple linear XDF expressions of the form `X`, `X/divisor`, or `X/divisor*multiplier`; unsupported formulas are shown as raw values.
-- 16-bit byte order is read from XDF `DEFAULTS lsbfirst`; the supplied XDF has `lsbfirst=0`. This interpretation still needs comparison against TunerPro using known table values before edited BIN files are trusted.
-- Axis labels/breakpoint-linked axes are not yet rendered as full RPM/TPS headers.
-- No checksum correction, ECU serial protocol, ECU read, DTC scanner, live data, flash, or recovery operation is implemented. USB FTDI detection only confirms the USB device is enumerated.
-- Never flash an edited file until its values, byte order, checksum, and ECU protocol are independently validated against the known-good laptop workflow.
+## Build
+Open in Android Studio or use the included GitHub Actions workflow to build a debug APK.
 
-Target: minSdk 26, compileSdk 35, targetSdk 32, Java/Kotlin JVM 17.
+## Important limitations
+This is an offline map editor prototype, not a complete ECU tuning/flash tool. Some XDF axis definitions and nonlinear equations are not supported. FTDI detection only identifies a USB device; it does not communicate with the ECU. No checksum correction, ECU read/write, DTC scanning, live data, flashing, or recovery is implemented. Validate values, axes, block editing, and saved BIN against TunerPro using duplicate files. Do not flash edited files until the ECU protocol, checksum, readback, and recovery process are independently validated.

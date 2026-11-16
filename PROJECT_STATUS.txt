@@ -1,17 +1,24 @@
-Honda ECU Remap Android — Alpha 0.5
+Honda ECU Remap Android — Alpha 0.6
 
 Included:
 - Load BIN and XDF using Android document picker.
-- Parse XDF table names, dimensions, Z addresses, bit widths, decimal places, and Z-axis math expressions.
-- Display/modify values using supported simple linear XDF equations.
-- Read/write multi-byte values using XDF DEFAULTS lsbfirst setting (must be validated against TunerPro).
-- Export a new BIN copy; source file is not overwritten.
-- Basic USB VID/PID detection for FTDI devices.
-- GitHub Actions workflow builds debug APK.
+- Parse XDF table names, dimensions, Z addresses, bit widths, decimal places, and supported linear Z-axis math expressions.
+- Display/edit engineering values using the XDF Z-axis equation.
+- Display linked TPS breakpoint values across columns and RPM breakpoint values down rows when the XDF links them.
+- Horizontal and vertical scrolling for wide calibration tables.
+- Select a rectangular block by choosing its first cell and tapping PILIH BLOK then the opposite corner.
+- Copy a selected block to clipboard as tab/newline-separated engineering values.
+- Paste a rectangular block of engineering values into the BIN from clipboard/spreadsheet text.
+- Export a new BIN copy; original source file is not overwritten.
+- Basic USB VID/PID detection for FTDI devices only.
+- GitHub Actions workflow builds a debug APK.
 
 Not implemented:
-- Full XDF equation engine and linked RPM/TPS axis headers.
+- Full XDF expression engine and all axis object types (unlinked/embedded axes may still use index labels).
 - Checksum calculation/correction.
 - FTDI serial communication, ECU read/write, flashing, DTC scan, live data, or recovery.
 
-Safety: do not flash edited files. Validate displayed values against TunerPro and establish checksum/protocol/recovery before any ECU write.
+Validation required:
+- Compare map values and axis labels against TunerPro for each map before relying on edits.
+- Verify block copy/paste and save/reopen on a duplicate BIN.
+- Do not flash edited files until checksum, communication protocol, readback, and recovery are validated.
