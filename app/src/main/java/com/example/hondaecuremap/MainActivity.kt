@@ -282,43 +282,59 @@ for (rowIndex in 0 until table.rows) {
         } ?: "RAW $raw"
 
         val button = Button(this).apply {
-            text = shown
-            isAllCaps = false
-            textSize = 11f
-            minWidth = 0
-            setPadding(2, 4, 2, 4)
-            layoutParams = TableRow.LayoutParams(
-                dp(84), dp(54)
-            ).apply {
-                setMargins(2, 2, 2, 2)
+    text = shown
+    isAllCaps = false
+    textSize = 11f
+    minWidth = 0
+    setPadding(2, 4, 2, 4)
+    layoutParams = TableRow.LayoutParams(
+        dp(84), dp(54)
+    ).apply {
+        setMargins(2, 2, 2, 2)
+    }
+}
+
+button.setOnTouchListener { view, event ->
+    when (event.action) {
+
+        android.view.MotionEvent.ACTION_DOWN -> {
+            view.parent.requestDisallowInterceptTouchEvent(true)
+
+            selectedCellIndex = index
+            rangeEndIndex = null
+            refreshSelection()
+            true
+        }
+
+        android.view.MotionEvent.ACTION_MOVE -> {
+            val target = cellViews.firstOrNull { (_, cell) ->
+                val bounds = android.graphics.Rect()
+                cell.getGlobalVisibleRect(bounds) &&
+                    bounds.contains(
+                        event.rawX.toInt(),
+                        event.rawY.toInt()
+                    )
             }
-             if (target != null) {
+
+            if (target != null) {
                 rangeEndIndex = target.first
                 refreshSelection()
             }
             true
         }
 
-        android.view.MotionEvent.ACTION_UP -> {
-            view.parent.requestDisallowInterceptTouchEvent(false)
-            true
-        }
-
+        android.view.MotionEvent.ACTION_UP,
         android.view.MotionEvent.ACTION_CANCEL -> {
             view.parent.requestDisallowInterceptTouchEvent(false)
             true
         }
 
         else -> true
-        }
-        
-      button.setOnClickListener {
-            selectedCellIndex = index
-            rangeEndIndex = null
-            refreshSelection()
-      }
-        cellViews.add(index to button)
-        row.addView(button)
+    }
+}
+
+cellViews.add(index to button)
+row.addView(button)
     }
 
     grid.addView(row)
