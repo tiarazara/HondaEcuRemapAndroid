@@ -207,36 +207,168 @@ class MainActivity : ComponentActivity() {
 }
         val horizontal = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = true; isFillViewport = false }
         val grid = TableLayout(this).apply { isStretchAllColumns = false }
-        val header = TableRow(this)
-        header.addView(axisCell("RPM ↓ / TPS →", 84, true))
-        for (col in 0 until table.cols) header.addView(axisCell(xAxis?.getOrNull(col)?.let { fmtAxis(it) } ?: "TPS ${col + 1}", 84, true))
-        grid.addView(header)
-        for (rowIndex in 0 until table.rows) {
-            val row = TableRow(this)
-            row.addView(axisCell(yAxis?.getOrNull(rowIndex)?.let { fmtAxis(it) } ?: "RPM ${rowIndex + 1}", 84, true))
-            for (colIndex in 0 until table.cols) {
-                val index = rowIndex * table.cols + colIndex
-                val position = addr + index * width
-                val raw = readRaw(bytes, position, width, table.lsbFirst)
-                val engineering = scaleFromRaw(raw, table.equation)
-                val shown = engineering?.let { String.format(java.util.Locale.US, "% .${table.decimals.coerceIn(0, 4)}f", it) } ?: "RAW $raw"
-                val button = Button(this).apply {
-                    text = shown
-                    isAllCaps = false
-                    textSize = 11f
-                    minWidth = 0
-                    setPadding(2, 4, 2, 4)
-                    val end = rangeEndIndex
-                    val inRange = if (end == null) false else { val r1 = selectedCellIndex / table.cols; val c1 = selectedCellIndex % table.cols; val r2 = end / table.cols; val c2 = end % table.cols; rowIndex in minOf(r1, r2)..maxOf(r1, r2) && colIndex in minOf(c1, c2)..maxOf(c1, c2) }
-                    setBackgroundColor(if (inRange) 0xFF9BC7F3.toInt() else if (index == selectedCellIndex) 0xFFB7D7F5.toInt() else 0xFFE1E5EA.toInt())
-                    layoutParams = TableRow.LayoutParams(dp(84), dp(54)).apply { setMargins(2, 2, 2, 2) }
-                    isClickable = false
-                    isLongClickable = false
-                    isFocusable = false
-                }
-                row.addView(button)
+        val cellViews = mutableListOf<Pair<Int, Button>>()
+
+fun refreshSelection() {
+    val end = rangeEndIndex
+    val r1 = selectedCellIndex / table.cols
+    val c1 = selectedCellIndex % table.cols
+    val r2 = end?.div(table.cols) ?: r1
+    val c2 = end?.rem(table.cols) ?: c1
+
+    cellViews.forEach { (index, button) ->
+        val r = index / table.cols
+        val c = index % table.cols
+
+        val selected = if (end == null) {
+            index == selectedCellIndex
+        } else {
+            r in minOf(r1, r2)..maxOf(r1, r2) &&
+            c in minOf(c1, c2)..maxOf(c1, c2)
+        }
+
+        button.setBackgroundColor(
+            if (selected) 0xFF9BC7F3.toInt()
+            else 0xFFE1E5EA.toInt()
+        )
+    }
+}
+
+val corner = axisCell("SELECT\nALL", 84, true)
+corner.setOnClickListener {
+    selectedCellIndex = 0
+    rangeEndIndex = table.rows * table.cols - 1
+    refreshSelection()
+}
+header.addView(corner)
+
+for (col in 0 until table.cols) {
+    header.addView(
+        axisCell(
+            xAxis?.getOrNull(col)?.let { fmtAxis(it) } ?: "TPS ${col + 1}",
+            84,
+            true
+        )
+    )
+}
+grid.addView(header)
+
+val handler = android.os.Handler(android.os.Looper.getMainLooper())
+
+for (rowIndex in 0 until table.rows) {
+    val row = TableRow(this)
+
+    row.addView(
+        axisCell(
+            yAxis?.getOrNull(rowIndex)?.let { fmtAxis(it) }
+                ?: "RPM ${rowIndex + 1}",
+            84,
+            true
+        )
+    )
+
+    for (colIndex in 0 until table.cols) {
+        val index = rowIndex * table.cols + colIndex
+        val position = addr + index * width
+        val raw = readRaw(bytes, position, width, table.lsbFirst)
+        val engineering = scaleFromRaw(raw, table.equation)
+
+        val shown = engineering?.let {
+            String.format(
+                java.util.Locale.US,
+                "% .${table.decimals.coerceIn(0, 4)}f",
+                it
+            )
+        } ?: "RAW $raw"
+
+        val button = Button(this).apply {
+            text = shown
+            isAllCaps = false
+            textSize = 11f
+            minWidth = 0
+            setPadding(2, 4, 2, 4)
+            layoutParams = TableRow.LayoutParams(
+                dp(84), dp(54)
+            ).apply {
+                setMargins(2, 2, 2, 2)
             }
-            grid.addView(row)
+        }
+
+        var selecting = false
+        var pending: Runnable? = null
+
+        button.setOnTouchListener { v, event ->
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    pending?.let { handler.removeCallbacks(it) }
+
+                    val task = Runnable {
+                        selecting = true
+                        selectedCellIndex = index
+                        rangeEndIndex = index
+                        vertical.requestDisallowInterceptTouchEvent(true)
+                        refreshSelection()
+                    }
+
+                    pending = task
+                    handler.postDelayed(
+                        task,
+                        android.view.ViewConfiguration.getLongPressTimeout().toLong()
+                    )
+                    true
+                }
+
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    if (selecting) {
+                        vertical.requestDisallowInterceptTouchEvent(true)
+
+                        val target = cellViews.firstOrNull { (_, cell) ->
+                            val location = IntArray(2)
+                            cell.getLocationOnScreen(location)
+
+                            event.rawX >= location[0] &&
+                            event.rawX <= location[0] + cell.width &&
+                            event.rawY >= location[1] &&
+                            event.rawY <= location[1] + cell.height
+                        }
+
+                        target?.let {
+                            rangeEndIndex = it.first
+                            refreshSelection()
+                        }
+                    }
+                    true
+                }
+
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL -> {
+                    pending?.let { handler.removeCallbacks(it) }
+
+                    if (!selecting &&
+                        event.actionMasked == android.view.MotionEvent.ACTION_UP
+                    ) {
+                        selectedCellIndex = index
+                        rangeEndIndex = null
+                        refreshSelection()
+                    }
+
+                    vertical.requestDisallowInterceptTouchEvent(false)
+                    selecting = false
+                    true
+                }
+
+                else -> true
+            }
+        }
+
+        cellViews.add(index to button)
+        row.addView(button)
+    }
+
+    grid.addView(row)
+}
+
+refreshSelection()
         }
         horizontal.addView(grid)
         vertical.addView(horizontal)
