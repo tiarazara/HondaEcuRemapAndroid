@@ -205,7 +205,6 @@ class MainActivity : ComponentActivity() {
     isFillViewport = true
     isSmoothScrollingEnabled = true
 }
-        }
         val horizontal = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = true; isFillViewport = false }
         val grid = TableLayout(this).apply { isStretchAllColumns = false }
         val header = TableRow(this)
