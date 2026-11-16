@@ -292,9 +292,12 @@ for (rowIndex in 0 until table.rows) {
             ).apply {
                 setMargins(2, 2, 2, 2)
             }
+button.setOnClickListener {
+            selectedCellIndex = index
+            rangeEndIndex = null
+            refreshSelection()
         }
-
-        
+      
 
         cellViews.add(index to button)
         row.addView(button)
