@@ -1,26 +1,17 @@
-Honda ECU Remap Android — Alpha 0.3 (editor preview)
-
-Device target: Android 12 (API 31) or newer; minSdk 26.
-Target ECU definition supplied by user: Honda Scoopy K93-N01.
+Honda ECU Remap Android — Alpha 0.5
 
 Included:
-- Select BIN using Android Storage Access Framework.
-- Select XDF XML and parse XDFTABLE / Z-axis embedded data.
-- List map names, dimensions, bit width and byte address.
-- Show map cells in a phone-friendly 5-column layout.
-- Edit raw HEX bytes in memory, preserving byte sequence exactly as entered.
-- Export the modified BIN to a new file; source file is not overwritten.
-- Display SHA-256 and basic FTDI USB device detection.
+- Load BIN and XDF using Android document picker.
+- Parse XDF table names, dimensions, Z addresses, bit widths, decimal places, and Z-axis math expressions.
+- Display/modify values using supported simple linear XDF equations.
+- Read/write multi-byte values using XDF DEFAULTS lsbfirst setting (must be validated against TunerPro).
+- Export a new BIN copy; source file is not overwritten.
+- Basic USB VID/PID detection for FTDI devices.
+- GitHub Actions workflow builds debug APK.
 
-Not yet included:
-- XDF engineering-unit equation evaluation and conversion.
-- Full XDF axis/breakpoint rendering and 3D surface plot.
-- Verified checksum correction.
-- Serial protocol implementation, ECU write/flash, readback and recovery.
+Not implemented:
+- Full XDF equation engine and linked RPM/TPS axis headers.
+- Checksum calculation/correction.
+- FTDI serial communication, ECU read/write, flashing, DTC scan, live data, or recovery.
 
-Important:
-The raw HEX editor is an initial editing interface, not a validated calibration editor.
-For 16-bit cells, the app preserves the byte order shown in the BIN; it does not
-assume endianness or convert values through XDF equations. Verify all edits against
-the established TunerPro workflow before using a modified file. Flashing is not
-implemented in this build.
+Safety: do not flash edited files. Validate displayed values against TunerPro and establish checksum/protocol/recovery before any ECU write.
