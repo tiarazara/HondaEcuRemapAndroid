@@ -233,7 +233,7 @@ fun refreshSelection() {
         )
     }
 }
-
+val header = TableRow(this)
 val corner = axisCell("SELECT\nALL", 84, true)
 corner.setOnClickListener {
     selectedCellIndex = 0
@@ -304,7 +304,7 @@ for (rowIndex in 0 until table.rows) {
 }
 
 refreshSelection()
-        }
+        
         horizontal.addView(grid)
         vertical.addView(horizontal)
         mapGrid.addView(vertical, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(560)))
