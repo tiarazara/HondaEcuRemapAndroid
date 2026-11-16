@@ -294,72 +294,7 @@ for (rowIndex in 0 until table.rows) {
             }
         }
 
-        var selecting = false
-        var pending: Runnable? = null
-
-        button.setOnTouchListener { v, event ->
-            when (event.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> {
-                    pending?.let { handler.removeCallbacks(it) }
-
-                    val task = Runnable {
-                        selecting = true
-                        selectedCellIndex = index
-                        rangeEndIndex = index
-                        vertical.requestDisallowInterceptTouchEvent(true)
-                        refreshSelection()
-                    }
-
-                    pending = task
-                    handler.postDelayed(
-                        task,
-                        android.view.ViewConfiguration.getLongPressTimeout().toLong()
-                    )
-                    true
-                }
-
-                android.view.MotionEvent.ACTION_MOVE -> {
-                    if (selecting) {
-                        vertical.requestDisallowInterceptTouchEvent(true)
-
-                        val target = cellViews.firstOrNull { (_, cell) ->
-                            val location = IntArray(2)
-                            cell.getLocationOnScreen(location)
-
-                            event.rawX >= location[0] &&
-                            event.rawX <= location[0] + cell.width &&
-                            event.rawY >= location[1] &&
-                            event.rawY <= location[1] + cell.height
-                        }
-
-                        target?.let {
-                            rangeEndIndex = it.first
-                            refreshSelection()
-                        }
-                    }
-                    true
-                }
-
-                android.view.MotionEvent.ACTION_UP,
-                android.view.MotionEvent.ACTION_CANCEL -> {
-                    pending?.let { handler.removeCallbacks(it) }
-
-                    if (!selecting &&
-                        event.actionMasked == android.view.MotionEvent.ACTION_UP
-                    ) {
-                        selectedCellIndex = index
-                        rangeEndIndex = null
-                        refreshSelection()
-                    }
-
-                    vertical.requestDisallowInterceptTouchEvent(false)
-                    selecting = false
-                    true
-                }
-
-                else -> true
-            }
-        }
+        
 
         cellViews.add(index to button)
         row.addView(button)
