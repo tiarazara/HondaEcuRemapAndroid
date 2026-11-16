@@ -358,14 +358,56 @@ row.addView(button)
 
     grid.addView(row)
 }
+val copyButton = Button(this).apply {
+    text = "COPY SELECTED"
+    isAllCaps = false
 
+    setOnClickListener {
+        val end = rangeEndIndex
+
+        val r1 = selectedCellIndex / table.cols
+        val c1 = selectedCellIndex % table.cols
+        val r2 = end?.div(table.cols) ?: r1
+        val c2 = end?.rem(table.cols) ?: c1
+
+        val minRow = minOf(r1, r2)
+        val maxRow = maxOf(r1, r2)
+        val minCol = minOf(c1, c2)
+        val maxCol = maxOf(c1, c2)
+
+        val copiedText = (minRow..maxRow).joinToString("\n") { r ->
+            (minCol..maxCol).joinToString("\t") { c ->
+                val index = r * table.cols + c
+                cellViews.first { it.first == index }
+                    .second.text.toString()
+            }
+        }
+
+        val clipboard =
+            getSystemService(CLIPBOARD_SERVICE)
+                as android.content.ClipboardManager
+
+        clipboard.setPrimaryClip(
+            android.content.ClipData.newPlainText(
+                "Selected cells",
+                copiedText
+            )
+        )
+
+        android.widget.Toast.makeText(
+            this,
+            "Data berhasil disalin",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
+}
 refreshSelection()
-        
-        horizontal.addView(grid)
-        vertical.addView(horizontal)
-        selectionInfo.text = "Sel terpilih: 1"
+
+horizontal.addView(grid)
+vertical.addView(horizontal)
 
 mapGrid.addView(selectionInfo)
+mapGrid.addView(copyButton)
 
 mapGrid.addView(
     vertical,
