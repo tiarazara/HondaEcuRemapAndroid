@@ -179,19 +179,32 @@ class MainActivity : ComponentActivity() {
         mapPreview.text = "${table.name}\nAlamat: 0x%X • ${table.rows} baris × ${table.cols} kolom • ${table.bits}-bit$unit\nKolom → TPS: ${if (xAxis != null) "breakpoint OK" else "belum ditautkan"}   Baris ↓ RPM: ${if (yAxis != null) "breakpoint OK" else "belum ditautkan"}\nSel awal: baris ${selectedCellIndex / table.cols + 1}, kolom ${selectedCellIndex % table.cols + 1}$rangeText • perubahan: ${if (dirty) "ada" else "belum ada"}.".format(addr)
         mapGrid.removeAllViews()
         /* Map editing and block-operation controls are intentionally absent in read-only mode. */
-        val vertical = ScrollView(this).apply {
-            isFillViewport = true
-            isSmoothScrollingEnabled = true
-            // Keep the outer page from stealing vertical swipes made inside the map.
-            setOnTouchListener { view, event ->
-                when (event.actionMasked) {
-                    android.view.MotionEvent.ACTION_DOWN,
-                    android.view.MotionEvent.ACTION_MOVE -> view.parent?.requestDisallowInterceptTouchEvent(true)
-                    android.view.MotionEvent.ACTION_UP,
-                    android.view.MotionEvent.ACTION_CANCEL -> view.parent?.requestDisallowInterceptTouchEvent(false)
-                }
-                false
+        val vertical = object : ScrollView(this) {
+    override fun dispatchTouchEvent(
+        event: android.view.MotionEvent
+    ): Boolean {
+        when (event.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN,
+            android.view.MotionEvent.ACTION_MOVE -> {
+                parent?.requestDisallowInterceptTouchEvent(true)
             }
+        }
+
+        val handled = super.dispatchTouchEvent(event)
+
+        when (event.actionMasked) {
+            android.view.MotionEvent.ACTION_UP,
+            android.view.MotionEvent.ACTION_CANCEL -> {
+                parent?.requestDisallowInterceptTouchEvent(false)
+            }
+        }
+
+        return handled
+    }
+}.apply {
+    isFillViewport = true
+    isSmoothScrollingEnabled = true
+}
         }
         val horizontal = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = true; isFillViewport = false }
         val grid = TableLayout(this).apply { isStretchAllColumns = false }
