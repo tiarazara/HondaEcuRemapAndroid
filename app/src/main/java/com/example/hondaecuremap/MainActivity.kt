@@ -178,6 +178,11 @@ class MainActivity : ComponentActivity() {
         val rangeText = rangeEndIndex?.let { end -> "\nBlok: baris ${minOf(selectedCellIndex / table.cols, end / table.cols) + 1}-${maxOf(selectedCellIndex / table.cols, end / table.cols) + 1}, kolom ${minOf(selectedCellIndex % table.cols, end % table.cols) + 1}-${maxOf(selectedCellIndex % table.cols, end % table.cols) + 1}" } ?: ""
         mapPreview.text = "${table.name}\nAlamat: 0x%X • ${table.rows} baris × ${table.cols} kolom • ${table.bits}-bit$unit\nKolom → TPS: ${if (xAxis != null) "breakpoint OK" else "belum ditautkan"}   Baris ↓ RPM: ${if (yAxis != null) "breakpoint OK" else "belum ditautkan"}\nSel awal: baris ${selectedCellIndex / table.cols + 1}, kolom ${selectedCellIndex % table.cols + 1}$rangeText • perubahan: ${if (dirty) "ada" else "belum ada"}.".format(addr)
         mapGrid.removeAllViews()
+        val selectionInfo = TextView(this).apply {
+    textSize = 13f
+    setPadding(dp(8), dp(8), dp(8), dp(8))
+    text = "Sel terpilih: 1"
+}
         /* Map editing and block-operation controls are intentionally absent in read-only mode. */
         val vertical = object : ScrollView(this) {
     override fun dispatchTouchEvent(
@@ -216,6 +221,20 @@ fun refreshSelection() {
     val r2 = end?.div(table.cols) ?: r1
     val c2 = end?.rem(table.cols) ?: c1
 
+    val minRow = minOf(r1, r2)
+    val maxRow = maxOf(r1, r2)
+    val minCol = minOf(c1, c2)
+    val maxCol = maxOf(c1, c2)
+
+    val selectedRows = maxRow - minRow + 1
+    val selectedCols = maxCol - minCol + 1
+    val selectedCount = selectedRows * selectedCols
+
+    selectionInfo.text =
+        "Sel terpilih: $selectedCount\n" +
+        "Baris: ${minRow + 1} - ${maxRow + 1} | " +
+        "Kolom: ${minCol + 1} - ${maxCol + 1}"
+
     cellViews.forEach { (index, button) ->
         val r = index / table.cols
         val c = index % table.cols
@@ -223,8 +242,8 @@ fun refreshSelection() {
         val selected = if (end == null) {
             index == selectedCellIndex
         } else {
-            r in minOf(r1, r2)..maxOf(r1, r2) &&
-            c in minOf(c1, c2)..maxOf(c1, c2)
+            r in minRow..maxRow &&
+            c in minCol..maxCol
         }
 
         button.setBackgroundColor(
@@ -344,7 +363,17 @@ refreshSelection()
         
         horizontal.addView(grid)
         vertical.addView(horizontal)
-        mapGrid.addView(vertical, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(560)))
+        selectionInfo.text = "Sel terpilih: 1"
+
+mapGrid.addView(selectionInfo)
+
+mapGrid.addView(
+    vertical,
+    LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        dp(560)
+    )
+)
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
