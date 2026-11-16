@@ -395,10 +395,10 @@ val copyButton = Button(this).apply {
         )
 
         android.widget.Toast.makeText(
-            this,
-            "Data berhasil disalin",
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
+    this@MainActivity,
+    "Data berhasil disalin",
+    android.widget.Toast.LENGTH_SHORT
+).show()
     }
 }
 refreshSelection()
