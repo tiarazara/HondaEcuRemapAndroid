@@ -53,20 +53,21 @@ class MainActivity : ComponentActivity() {
         val scroll = ScrollView(this)
         val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         body.addView(TextView(this).apply { text = "HONDA ECU REMAP"; textSize = 24f; setTextColor(0xFF12345A.toInt()); gravity = Gravity.CENTER_VERTICAL })
-        body.addView(TextView(this).apply { text = "Scoopy K93-N01  •  Alpha 0.6 Map Editor"; textSize = 13f; setTextColor(0xFF64748B.toInt()); setPadding(0, 4, 0, 16) })
+        body.addView(TextView(this).apply { text = "Scoopy K93-N01  •  Alpha 0.7 Read-Only Viewer"; textSize = 13f; setTextColor(0xFF64748B.toInt()); setPadding(0, 4, 0, 16) })
         body.addView(actionButton("1. BUKA FILE BIN", "Pilih file backup ECU") { openBin.launch(arrayOf("application/octet-stream", "application/*", "*/*")) })
         body.addView(actionButton("2. MUAT FILE XDF", "Pilih definisi map TunerPro") { openXdf.launch(arrayOf("application/xml", "text/xml", "*/*")) })
-        body.addView(actionButton("SIMPAN SALINAN BIN", "Ekspor file tanpa perubahan") { if (binBytes == null) toast("Buka BIN dulu") else saveBin.launch(binName.substringBeforeLast('.', binName) + "_copy.bin") })
+        /* Read-only viewer: export/edit controls intentionally omitted. */
+        /* body.addView(actionButton("SIMPAN SALINAN BIN", "Ekspor file tanpa perubahan") { if (binBytes == null) toast("Buka BIN dulu") else saveBin.launch(binName.substringBeforeLast('.', binName) + "_copy.bin") }) */
         body.addView(section("STATUS PROYEK"))
         status = infoText("Belum ada file dibuka")
         binInfo = infoText("BIN: belum dimuat")
         xdfInfo = infoText("XDF: belum dimuat")
         body.addView(status); body.addView(binInfo); body.addView(xdfInfo)
         body.addView(section("DAFTAR MAP"))
-        body.addView(infoText("Tabel memakai sumbu RPM dan TPS dari breakpoint XDF. Ketuk PILIH BLOK, sentuh dua sudut area, lalu salin atau tempel nilai sekaligus seperti spreadsheet."))
+        body.addView(infoText("Tampilan baca-saja. Tabel memakai sumbu RPM dan TPS dari breakpoint XDF; seluruh baris dapat digulir untuk pemeriksaan."))
         mapList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         body.addView(mapList)
-        body.addView(section("EDITOR MAP (NILAI TEKNIK XDF)"))
+        body.addView(section("PRATINJAU MAP (NILAI TEKNIK XDF)"))
         mapPreview = infoText("Buka BIN dan XDF, lalu pilih salah satu map.")
         body.addView(mapPreview)
         mapGrid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -75,10 +76,10 @@ class MainActivity : ComponentActivity() {
         body.addView(actionButton("PERIKSA PERANGKAT USB", "Deteksi FTDI melalui OTG") { scanUsb() })
         usbInfo = infoText("Belum diperiksa")
         body.addView(usbInfo)
-        body.addView(section("CARA EDIT"))
-        body.addView(infoText("Geser tabel ke kanan/kiri dan atas/bawah. PILIH BLOK: tekan tombolnya, lalu sentuh sudut akhir area. SALIN BLOK menyalin nilai sebagai TAB/baris baru; TEMPEL BLOK menerima data dari spreadsheet atau TunerPro. Sumbu mengikuti breakpoint XDF."))
+        body.addView(section("NAVIGASI TABEL"))
+        body.addView(infoText("Geser tabel ke atas/bawah untuk melihat seluruh breakpoint RPM, dan ke kanan/kiri untuk melihat seluruh breakpoint TPS. Alpha 0.7 ini hanya untuk membaca dan memeriksa data."))
         body.addView(section("KEAMANAN"))
-        body.addView(infoText("Aplikasi ini mengedit salinan BIN di memori dan tidak mengirim perintah flash ke ECU. Simpan sebagai file baru, bandingkan dengan BIN asli, dan lakukan verifikasi checksum/protokol secara terpisah sebelum flashing."))
+        body.addView(infoText("Alpha 0.7 adalah penampil baca-saja. Aplikasi tidak mengubah BIN dan tidak mengirim perintah ke ECU. Komunikasi FTDI, checksum, dan flashing belum diimplementasikan atau divalidasi."))
         scroll.addView(body)
         root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
@@ -177,14 +178,22 @@ class MainActivity : ComponentActivity() {
         val rangeText = rangeEndIndex?.let { end -> "\nBlok: baris ${minOf(selectedCellIndex / table.cols, end / table.cols) + 1}-${maxOf(selectedCellIndex / table.cols, end / table.cols) + 1}, kolom ${minOf(selectedCellIndex % table.cols, end % table.cols) + 1}-${maxOf(selectedCellIndex % table.cols, end % table.cols) + 1}" } ?: ""
         mapPreview.text = "${table.name}\nAlamat: 0x%X • ${table.rows} baris × ${table.cols} kolom • ${table.bits}-bit$unit\nKolom → TPS: ${if (xAxis != null) "breakpoint OK" else "belum ditautkan"}   Baris ↓ RPM: ${if (yAxis != null) "breakpoint OK" else "belum ditautkan"}\nSel awal: baris ${selectedCellIndex / table.cols + 1}, kolom ${selectedCellIndex % table.cols + 1}$rangeText • perubahan: ${if (dirty) "ada" else "belum ada"}.".format(addr)
         mapGrid.removeAllViews()
-        val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        controls.addView(Button(this).apply { text = "EDIT SEL"; isAllCaps = false; setOnClickListener { editSelectedCell(table) } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        controls.addView(Button(this).apply { text = if (blockSelectMode) "SENTUH SUDUT AKHIR" else "PILIH BLOK"; isAllCaps = false; setOnClickListener { blockSelectMode = true; rangeEndIndex = null; showMap(table); toast("Sentuh sel sudut akhir blok") } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        controls.addView(Button(this).apply { text = "SALIN BLOK"; isAllCaps = false; setOnClickListener { copySelectedBlock(table) } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        controls.addView(Button(this).apply { text = "TEMPEL BLOK"; isAllCaps = false; setOnClickListener { pasteBlock(table) } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        mapGrid.addView(controls)
-        val vertical = ScrollView(this)
-        val horizontal = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = true }
+        /* Map editing and block-operation controls are intentionally absent in read-only mode. */
+        val vertical = ScrollView(this).apply {
+            isFillViewport = true
+            isSmoothScrollingEnabled = true
+            // Keep the outer page from stealing vertical swipes made inside the map.
+            setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN,
+                    android.view.MotionEvent.ACTION_MOVE -> view.parent?.requestDisallowInterceptTouchEvent(true)
+                    android.view.MotionEvent.ACTION_UP,
+                    android.view.MotionEvent.ACTION_CANCEL -> view.parent?.requestDisallowInterceptTouchEvent(false)
+                }
+                false
+            }
+        }
+        val horizontal = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = true; isFillViewport = false }
         val grid = TableLayout(this).apply { isStretchAllColumns = false }
         val header = TableRow(this)
         header.addView(axisCell("RPM ↓ / TPS →", 84, true))
@@ -209,8 +218,9 @@ class MainActivity : ComponentActivity() {
                     val inRange = if (end == null) false else { val r1 = selectedCellIndex / table.cols; val c1 = selectedCellIndex % table.cols; val r2 = end / table.cols; val c2 = end % table.cols; rowIndex in minOf(r1, r2)..maxOf(r1, r2) && colIndex in minOf(c1, c2)..maxOf(c1, c2) }
                     setBackgroundColor(if (inRange) 0xFF9BC7F3.toInt() else if (index == selectedCellIndex) 0xFFB7D7F5.toInt() else 0xFFE1E5EA.toInt())
                     layoutParams = TableRow.LayoutParams(dp(84), dp(54)).apply { setMargins(2, 2, 2, 2) }
-                    setOnClickListener { if (blockSelectMode) { rangeEndIndex = index; blockSelectMode = false } else { selectedCellIndex = index; rangeEndIndex = null }; showMap(table) }
-                    setOnLongClickListener { selectedCellIndex = index; editSelectedCell(table); true }
+                    isClickable = false
+                    isLongClickable = false
+                    isFocusable = false
                 }
                 row.addView(button)
             }
@@ -218,7 +228,7 @@ class MainActivity : ComponentActivity() {
         }
         horizontal.addView(grid)
         vertical.addView(horizontal)
-        mapGrid.addView(vertical, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(430)))
+        mapGrid.addView(vertical, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(560)))
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

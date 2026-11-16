@@ -1,15 +1,13 @@
-Honda ECU Remap Android — Alpha 0.6
+Honda ECU Remap Android — Alpha 0.7 (read-only viewer)
 
 Included:
 - Load BIN and XDF using Android document picker.
 - Parse XDF table names, dimensions, Z addresses, bit widths, decimal places, and supported linear Z-axis math expressions.
-- Display/edit engineering values using the XDF Z-axis equation.
+- Display engineering values using the XDF Z-axis equation (read-only).
 - Display linked TPS breakpoint values across columns and RPM breakpoint values down rows when the XDF links them.
 - Horizontal and vertical scrolling for wide calibration tables.
-- Select a rectangular block by choosing its first cell and tapping PILIH BLOK then the opposite corner.
-- Copy a selected block to clipboard as tab/newline-separated engineering values.
-- Paste a rectangular block of engineering values into the BIN from clipboard/spreadsheet text.
-- Export a new BIN copy; original source file is not overwritten.
+- Map cells are non-interactive in this read-only preview build.
+- Editing, block operations, and modified BIN export are intentionally disabled.
 - Basic USB VID/PID detection for FTDI devices only.
 - GitHub Actions workflow builds a debug APK.
 
@@ -22,3 +20,6 @@ Validation required:
 - Compare map values and axis labels against TunerPro for each map before relying on edits.
 - Verify block copy/paste and save/reopen on a duplicate BIN.
 - Do not flash edited files until checksum, communication protocol, readback, and recovery are validated.
+
+
+Alpha 0.7 (read-only UI revision): map grid scroll now requests touch ownership while the user gestures inside it, to prevent the outer page scroll from intercepting vertical swipes. Map cells are non-interactive and map edit/export controls are omitted in this read-only build. ECU communication/flashing is not implemented or validated.
